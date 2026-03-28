@@ -32,6 +32,12 @@ const App = {
     Dashboard.cleanup();
     this.currentPage = page;
 
+    const appEl = document.getElementById('app');
+    if (page !== 'profile') {
+      appEl.innerHTML = renderNavbar(this.user, this.partyPot) + '<div id="page-content">' + Loader.pageHTML() + '</div>';
+      setActiveNav(page);
+    }
+
     await this.fetchPartyPot();
 
     let content = '';
@@ -46,7 +52,7 @@ const App = {
       content = `<div class="page"><div class="empty-state"><div class="icon">⚠️</div><p>Error: ${e.message}</p></div></div>`;
     }
 
-    document.getElementById('app').innerHTML = renderNavbar(this.user, this.partyPot) + content;
+    appEl.innerHTML = renderNavbar(this.user, this.partyPot) + content;
     setActiveNav(page);
 
     if (page === 'dashboard') Dashboard.startCountdowns();

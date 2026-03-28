@@ -8,7 +8,7 @@ const AdminPage = {
       <div class="page">
         <div class="page-title" style="justify-content:space-between;">
           <span>🛠 Admin Panel</span>
-          <button class="btn btn-danger btn-sm" onclick="AdminPage.resetAll()">Reset All Bets & Results</button>
+          <button class="btn btn-danger btn-sm" onclick="AdminPage.resetAll(this)">Reset All Bets & Results</button>
         </div>
         <div class="admin-tabs">
           <button class="admin-tab ${this.tab === 'users' ? 'active' : ''}" onclick="AdminPage.switchTab('users')">Users</button>
@@ -25,9 +25,12 @@ const AdminPage = {
 
   async switchTab(tab) {
     this.tab = tab;
-    const el = document.getElementById('admin-content');
-    if (el) el.innerHTML = await this.renderTab();
     document.querySelectorAll('.admin-tab').forEach(b => b.classList.toggle('active', b.textContent.toLowerCase() === tab));
+    const el = document.getElementById('admin-content');
+    if (el) el.innerHTML = Loader.pageHTML();
+    const content = await this.renderTab();
+    const el2 = document.getElementById('admin-content');
+    if (el2) el2.innerHTML = content;
   },
 
   async renderTab() {
@@ -48,8 +51,8 @@ const AdminPage = {
         <td>${u.email || '—'}</td>
         <td>
           <div class="inline-actions">
-            <button class="btn btn-ghost btn-sm" onclick="AdminPage.promptResetPw(${u.id}, '${u.name}')">Reset PW</button>
-            <button class="btn btn-danger btn-sm" onclick="AdminPage.deleteUser(${u.id}, '${u.name}')">Delete</button>
+            <button class="btn btn-ghost btn-sm" onclick="AdminPage.promptResetPw(${u.id}, '${u.name}', this)">Reset PW</button>
+            <button class="btn btn-danger btn-sm" onclick="AdminPage.deleteUser(${u.id}, '${u.name}', this)">Delete</button>
           </div>
         </td>
       </tr>
@@ -63,7 +66,7 @@ const AdminPage = {
           <input class="form-input" id="au-phone" placeholder="Phone" style="flex:1;min-width:120px;">
           <input class="form-input" id="au-email" placeholder="Email (optional)" style="flex:1;min-width:140px;">
           <input class="form-input" id="au-pw" placeholder="Password" type="password" style="flex:1;min-width:120px;">
-          <button class="btn btn-primary btn-sm" onclick="AdminPage.addUser()">Add</button>
+          <button class="btn btn-primary btn-sm" onclick="AdminPage.addUser(this)">Add</button>
         </div>
       </div>
       <h3 style="margin-bottom:12px;">All Users (${this.users.filter(u => !u.is_admin).length})</h3>
@@ -76,34 +79,41 @@ const AdminPage = {
     `;
   },
 
-  async addUser() {
+  async addUser(btnEl) {
     const name = document.getElementById('au-name').value.trim();
     const phone = document.getElementById('au-phone').value.trim();
     const email = document.getElementById('au-email').value.trim();
     const password = document.getElementById('au-pw').value;
     if (!name || !phone || !password) return Toast.error('Name, phone, and password required');
-    try {
-      await API.createUser({ name, phone, email, password });
-      Toast.success(`User ${name} created`);
-      this.switchTab('users');
-    } catch (e) { Toast.error(e.message); }
+    await Loader.btn(btnEl, async () => {
+      try {
+        await API.createUser({ name, phone, email, password });
+        Toast.success(`User ${name} created`);
+        this.switchTab('users');
+      } catch (e) { Toast.error(e.message); }
+    });
   },
 
-  async deleteUser(id, name) {
+  async deleteUser(id, name, btnEl) {
     if (!confirm(`Delete user "${name}"? This removes all their bets and points.`)) return;
-    try {
-      await API.deleteUser(id);
-      Toast.success(`${name} deleted`);
-      this.switchTab('users');
-    } catch (e) { Toast.error(e.message); }
+    await Loader.btn(btnEl, async () => {
+      try {
+        await API.deleteUser(id);
+        Toast.success(`${name} deleted`);
+        this.switchTab('users');
+      } catch (e) { Toast.error(e.message); }
+    });
   },
 
-  promptResetPw(id, name) {
+  async promptResetPw(id, name, btnEl) {
     const pw = prompt(`New password for ${name}:`);
     if (!pw) return;
-    API.resetUserPassword(id, pw)
-      .then(() => Toast.success(`Password reset for ${name}`))
-      .catch(e => Toast.error(e.message));
+    await Loader.btn(btnEl, async () => {
+      try {
+        await API.resetUserPassword(id, pw);
+        Toast.success(`Password reset for ${name}`);
+      } catch (e) { Toast.error(e.message); }
+    });
   },
 
   // ===== Matches =====
@@ -120,7 +130,7 @@ const AdminPage = {
           <td>${m.bet_points}</td>
           <td>
             <label class="toggle">
-              <input type="checkbox" ${m.betting_open ? 'checked' : ''} onchange="AdminPage.toggleBetting(${m.id}, this.checked)">
+              <input type="checkbox" ${m.betting_open ? 'checked' : ''} onchange="AdminPage.toggleBetting(${m.id}, this.checked, this)">
               <span class="toggle-slider"></span>
             </label>
           </td>
@@ -142,11 +152,17 @@ const AdminPage = {
     `;
   },
 
-  async toggleBetting(id, open) {
+  async toggleBetting(id, open, el) {
+    if (el) el.disabled = true;
     try {
       await API.updateMatch(id, { betting_open: open });
       Toast.success(`Betting ${open ? 'opened' : 'closed'}`);
-    } catch (e) { Toast.error(e.message); }
+    } catch (e) {
+      Toast.error(e.message);
+      if (el) el.checked = !open;
+    } finally {
+      if (el) el.disabled = false;
+    }
   },
 
   editMatch(id) {
@@ -185,14 +201,14 @@ const AdminPage = {
           <input class="form-input" type="datetime-local" id="em-cutoff" value="${m.bet_cutoff ? m.bet_cutoff.replace(' ', 'T').slice(0, 16) : ''}">
         </div>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-primary" onclick="AdminPage.saveMatch(${m.id})">Save</button>
+          <button class="btn btn-primary" onclick="AdminPage.saveMatch(${m.id}, this)">Save</button>
           <button class="btn btn-ghost" onclick="AdminPage.switchTab('matches')">Cancel</button>
         </div>
       </div>
     `;
   },
 
-  async saveMatch(id) {
+  async saveMatch(id, btnEl) {
     const data = {
       team_a: document.getElementById('em-ta').value.trim(),
       team_b: document.getElementById('em-tb').value.trim(),
@@ -202,11 +218,13 @@ const AdminPage = {
       bet_points: parseInt(document.getElementById('em-pts').value),
       bet_cutoff: document.getElementById('em-cutoff').value
     };
-    try {
-      await API.updateMatch(id, data);
-      Toast.success('Match updated');
-      this.switchTab('matches');
-    } catch (e) { Toast.error(e.message); }
+    await Loader.btn(btnEl, async () => {
+      try {
+        await API.updateMatch(id, data);
+        Toast.success('Match updated');
+        this.switchTab('matches');
+      } catch (e) { Toast.error(e.message); }
+    });
   },
 
   // ===== Bets (on behalf) =====
@@ -247,7 +265,7 @@ const AdminPage = {
       el.innerHTML = '<p style="color:var(--text-muted);margin-top:12px;">Select a match above to manage bets.</p>';
       return;
     }
-    el.innerHTML = '<p style="color:var(--text-muted);">Loading...</p>';
+    el.innerHTML = Loader.pageHTML();
     el.innerHTML = await this.renderBetGrid(matchId);
   },
 
@@ -268,10 +286,10 @@ const AdminPage = {
           <td style="font-weight:600;">${b.name}</td>
           <td>
             <div class="inline-actions">
-              <button class="bet-btn btn-sm ${sel('team_a')}" onclick="AdminPage.adminBet(${b.user_id}, ${matchId}, 'team_a')">${m.team_a}</button>
-              <button class="bet-btn btn-sm ${sel('tie')}" onclick="AdminPage.adminBet(${b.user_id}, ${matchId}, 'tie')">Tie</button>
-              <button class="bet-btn btn-sm ${sel('team_b')}" onclick="AdminPage.adminBet(${b.user_id}, ${matchId}, 'team_b')">${m.team_b}</button>
-              <button class="bet-btn btn-sm ${!b.prediction ? 'selected' : ''}" style="opacity:${!b.prediction ? 1 : 0.5}" onclick="AdminPage.adminBet(${b.user_id}, ${matchId}, null)">No Bet</button>
+              <button class="bet-btn btn-sm ${sel('team_a')}" onclick="AdminPage.adminBet(${b.user_id}, ${matchId}, 'team_a', this)">${m.team_a}</button>
+              <button class="bet-btn btn-sm ${sel('tie')}" onclick="AdminPage.adminBet(${b.user_id}, ${matchId}, 'tie', this)">Tie</button>
+              <button class="bet-btn btn-sm ${sel('team_b')}" onclick="AdminPage.adminBet(${b.user_id}, ${matchId}, 'team_b', this)">${m.team_b}</button>
+              <button class="bet-btn btn-sm ${!b.prediction ? 'selected' : ''}" style="opacity:${!b.prediction ? 1 : 0.5}" onclick="AdminPage.adminBet(${b.user_id}, ${matchId}, null, this)">No Bet</button>
             </div>
           </td>
           <td style="color:var(--text-muted);font-size:12px;">${b.prediction ? (b.prediction === 'team_a' ? m.team_a : b.prediction === 'team_b' ? m.team_b : 'Tie') : '—'}</td>
@@ -290,7 +308,11 @@ const AdminPage = {
     `;
   },
 
-  async adminBet(userId, matchId, prediction) {
+  async adminBet(userId, matchId, prediction, btnEl) {
+    const row = btnEl ? btnEl.closest('tr') : null;
+    const btns = row ? row.querySelectorAll('.bet-btn') : [];
+    btns.forEach(b => { b.disabled = true; b.classList.add('btn-loading'); });
+    if (btnEl) btnEl.innerHTML = '<span class="spinner-sm"></span>';
     try {
       const data = await API.adminPlaceBet(userId, matchId, prediction);
       if (data.resettled) {
@@ -300,7 +322,10 @@ const AdminPage = {
       }
       const el = document.getElementById('admin-bet-grid');
       el.innerHTML = await this.renderBetGrid(matchId);
-    } catch (e) { Toast.error(e.message); }
+    } catch (e) {
+      Toast.error(e.message);
+      btns.forEach(b => { b.disabled = false; b.classList.remove('btn-loading'); });
+    }
   },
 
   // ===== Results =====
@@ -346,10 +371,10 @@ const AdminPage = {
         <td>${m.match_date}</td>
         <td>
           <div class="inline-actions">
-            <button class="btn btn-sm" style="background:var(--accent-blue);color:#fff;" onclick="AdminPage.declareResult(${m.id}, 'team_a', '${m.team_a}')">${m.team_a} Won</button>
-            <button class="btn btn-sm" style="background:var(--accent-orange);color:#fff;" onclick="AdminPage.declareResult(${m.id}, 'team_b', '${m.team_b}')">${m.team_b} Won</button>
-            <button class="btn btn-sm" style="background:var(--accent-teal);color:#fff;" onclick="AdminPage.declareResult(${m.id}, 'tie', 'Tie')">Tie</button>
-            <button class="btn btn-sm" style="background:var(--text-muted);color:#fff;" onclick="AdminPage.declareResult(${m.id}, 'abandoned', 'Abandoned')">Abandoned</button>
+            <button class="btn btn-sm" style="background:var(--accent-blue);color:#fff;" onclick="AdminPage.declareResult(${m.id}, 'team_a', '${m.team_a}', this)">${m.team_a} Won</button>
+            <button class="btn btn-sm" style="background:var(--accent-orange);color:#fff;" onclick="AdminPage.declareResult(${m.id}, 'team_b', '${m.team_b}', this)">${m.team_b} Won</button>
+            <button class="btn btn-sm" style="background:var(--accent-teal);color:#fff;" onclick="AdminPage.declareResult(${m.id}, 'tie', 'Tie', this)">Tie</button>
+            <button class="btn btn-sm" style="background:var(--text-muted);color:#fff;" onclick="AdminPage.declareResult(${m.id}, 'abandoned', 'Abandoned', this)">Abandoned</button>
           </div>
         </td>
       </tr>
@@ -377,7 +402,7 @@ const AdminPage = {
           <td>${m.team_a} vs ${m.team_b}</td>
           <td>${winner}</td>
           <td>
-            <button class="btn btn-ghost btn-sm" onclick="AdminPage.undoResult(${m.id})">Undo</button>
+            <button class="btn btn-ghost btn-sm" onclick="AdminPage.undoResult(${m.id}, this)">Undo</button>
           </td>
         </tr>
       `;
@@ -393,11 +418,15 @@ const AdminPage = {
     `;
   },
 
-  async declareResult(id, result, label) {
+  async declareResult(id, result, label, btnEl) {
     const msg = result === 'abandoned'
       ? `Mark match as Abandoned? No points will be affected.`
       : `Declare "${label}" as winner?`;
     if (!confirm(msg)) return;
+    const row = btnEl ? btnEl.closest('tr') : null;
+    const btns = row ? row.querySelectorAll('.btn') : [];
+    btns.forEach(b => { b.disabled = true; b.classList.add('btn-loading'); });
+    if (btnEl) btnEl.innerHTML = '<span class="spinner-sm"></span> ' + btnEl.textContent;
     try {
       const data = await API.declareResult(id, result);
       if (data.abandoned) {
@@ -406,25 +435,32 @@ const AdminPage = {
         Toast.success(`Result declared! ${data.winners} winners share ${data.totalPool} pts (${data.pointsPerWinner} each)`);
       }
       this.switchTab('results');
-    } catch (e) { Toast.error(e.message); }
+    } catch (e) {
+      Toast.error(e.message);
+      btns.forEach(b => { b.disabled = false; b.classList.remove('btn-loading'); });
+    }
   },
 
-  async undoResult(id) {
+  async undoResult(id, btnEl) {
     if (!confirm('Undo this result? All points for this match will be reversed.')) return;
-    try {
-      await API.undoResult(id);
-      Toast.success('Result undone');
-      this.switchTab('results');
-    } catch (e) { Toast.error(e.message); }
+    await Loader.btn(btnEl, async () => {
+      try {
+        await API.undoResult(id);
+        Toast.success('Result undone');
+        this.switchTab('results');
+      } catch (e) { Toast.error(e.message); }
+    });
   },
 
-  async resetAll() {
+  async resetAll(btnEl) {
     if (!confirm('This will DELETE all bets, match results, and points for ALL users. Matches and users will be kept.\n\nAre you sure?')) return;
     if (!confirm('This action CANNOT be undone. Proceed?')) return;
-    try {
-      await API.resetAll();
-      Toast.success('All bets, results, and points have been cleared');
-      App.navigate('admin');
-    } catch (e) { Toast.error(e.message); }
+    await Loader.btn(btnEl, async () => {
+      try {
+        await API.resetAll();
+        Toast.success('All bets, results, and points have been cleared');
+        App.navigate('admin');
+      } catch (e) { Toast.error(e.message); }
+    });
   }
 };

@@ -18,23 +18,25 @@ const ProfilePage = {
             <label>New Password</label>
             <input type="password" class="form-input" id="prof-new-pw" placeholder="Min 6 characters">
           </div>
-          <button class="btn btn-primary" onclick="ProfilePage.changePassword()">Update Password</button>
+          <button class="btn btn-primary" onclick="ProfilePage.changePassword(this)">Update Password</button>
         </div>
       </div>
     `;
   },
 
-  async changePassword() {
+  async changePassword(btnEl) {
     const current = document.getElementById('prof-current-pw').value;
     const newPw = document.getElementById('prof-new-pw').value;
     if (!current || !newPw) return Toast.error('Please fill in all fields');
-    try {
-      await API.changePassword(current, newPw);
-      Toast.success('Password changed!');
-      document.getElementById('prof-current-pw').value = '';
-      document.getElementById('prof-new-pw').value = '';
-    } catch (e) {
-      Toast.error(e.message);
-    }
+    await Loader.btn(btnEl, async () => {
+      try {
+        await API.changePassword(current, newPw);
+        Toast.success('Password changed!');
+        document.getElementById('prof-current-pw').value = '';
+        document.getElementById('prof-new-pw').value = '';
+      } catch (e) {
+        Toast.error(e.message);
+      }
+    });
   }
 };

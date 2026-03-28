@@ -77,7 +77,7 @@ const LeaderboardPage = {
     overlay.innerHTML = `
       <div class="modal" style="max-width:600px;">
         <h3>${userName}'s Bet History</h3>
-        <div id="user-detail-content" style="text-align:center;padding:20px;color:var(--text-muted);">Loading...</div>
+        <div id="user-detail-content">${Loader.pageHTML()}</div>
         <div class="modal-actions">
           <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">Close</button>
         </div>

@@ -58,7 +58,13 @@ const Dashboard = {
     App.navigate('dashboard');
   },
 
-  async placeBet(matchId, prediction) {
+  async placeBet(matchId, prediction, btnEl) {
+    if (this._betting) return;
+    this._betting = true;
+    const card = btnEl ? btnEl.closest('.match-card') : null;
+    const btns = card ? card.querySelectorAll('.bet-btn') : [];
+    btns.forEach(b => { b.disabled = true; b.classList.add('btn-loading'); });
+    if (btnEl) btnEl.innerHTML = '<span class="spinner-sm"></span>';
     try {
       await API.placeBet(matchId, prediction);
       Toast.success(`Bet placed: ${prediction === 'tie' ? 'Tie' : prediction === 'team_a' ? this.getMatch(matchId).team_a : this.getMatch(matchId).team_b}`);
@@ -66,6 +72,9 @@ const Dashboard = {
       this.updateGrid();
     } catch (e) {
       Toast.error(e.message);
+      btns.forEach(b => { b.disabled = false; b.classList.remove('btn-loading'); });
+    } finally {
+      this._betting = false;
     }
   },
 
