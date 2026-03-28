@@ -6,7 +6,10 @@ const AdminPage = {
   async render() {
     return `
       <div class="page">
-        <div class="page-title">🛠 Admin Panel</div>
+        <div class="page-title" style="justify-content:space-between;">
+          <span>🛠 Admin Panel</span>
+          <button class="btn btn-danger btn-sm" onclick="AdminPage.resetAll()">Reset All Bets & Results</button>
+        </div>
         <div class="admin-tabs">
           <button class="admin-tab ${this.tab === 'users' ? 'active' : ''}" onclick="AdminPage.switchTab('users')">Users</button>
           <button class="admin-tab ${this.tab === 'matches' ? 'active' : ''}" onclick="AdminPage.switchTab('matches')">Matches</button>
@@ -412,6 +415,16 @@ const AdminPage = {
       await API.undoResult(id);
       Toast.success('Result undone');
       this.switchTab('results');
+    } catch (e) { Toast.error(e.message); }
+  },
+
+  async resetAll() {
+    if (!confirm('This will DELETE all bets, match results, and points for ALL users. Matches and users will be kept.\n\nAre you sure?')) return;
+    if (!confirm('This action CANNOT be undone. Proceed?')) return;
+    try {
+      await API.resetAll();
+      Toast.success('All bets, results, and points have been cleared');
+      App.navigate('admin');
     } catch (e) { Toast.error(e.message); }
   }
 };

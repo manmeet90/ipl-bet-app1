@@ -45,4 +45,5 @@ const API = {
   undoResult: (id) => API.post(`/admin/matches/${id}/undo-result`),
   getMatchBets: (matchId) => API.get(`/admin/bets/${matchId}`),
   adminPlaceBet: (user_id, match_id, prediction) => API.post('/admin/bets', { user_id, match_id, prediction }),
+  resetAll: () => API.post('/admin/reset-all'),
 };
