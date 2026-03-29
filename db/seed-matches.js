@@ -112,8 +112,8 @@ function seed() {
     console.log(`Database already has ${existingMatches.count} matches. Skipping seed.`);
   } else {
     const insert = db.prepare(`
-      INSERT INTO matches (match_number, team_a, team_b, match_date, match_time, venue, match_type, bet_points, bet_cutoff, betting_open)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      INSERT INTO matches (match_number, team_a, team_b, match_date, match_time, venue, match_type, bet_points, bet_cutoff)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertMany = db.transaction((matches) => {
@@ -122,7 +122,7 @@ function seed() {
         let betPoints = 50;
         if (matchType === 'qualifier' || matchType === 'eliminator') betPoints = 100;
         if (matchType === 'final') betPoints = 250;
-        const cutoff = `${m.date}T13:00:00`;
+        const cutoff = `${m.date}T13:00:00+05:30`;
         insert.run(m.n, m.a, m.b, m.date, m.time, m.venue, matchType, betPoints, cutoff);
       }
     });

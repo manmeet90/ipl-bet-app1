@@ -6,7 +6,6 @@ const router = express.Router();
 
 function isBettingClosed(match) {
   if (match.is_completed) return true;
-  if (match.betting_open === 0) return true;
   const now = new Date();
   const cutoff = new Date(match.bet_cutoff);
   return now >= cutoff;
@@ -25,9 +24,9 @@ router.get('/', requireAuth, (req, res) => {
 
   const result = matches.map(m => {
     const closed = isBettingClosed(m);
+    const { betting_open, ...rest } = m;
     const out = {
-      ...m,
-      betting_open: m.betting_open === 1,
+      ...rest,
       is_completed: m.is_completed === 1,
       betting_closed: closed,
       my_bet: myBetMap[m.id] || null
@@ -56,9 +55,9 @@ router.get('/:id', requireAuth, (req, res) => {
 
   const myBet = db.prepare('SELECT * FROM bets WHERE user_id = ? AND match_id = ?').get(userId, match.id);
 
+  const { betting_open: _bo, ...matchRest } = match;
   const out = {
-    ...match,
-    betting_open: match.betting_open === 1,
+    ...matchRest,
     is_completed: match.is_completed === 1,
     betting_closed: closed,
     my_bet: myBet ? myBet.prediction : null

@@ -47,15 +47,14 @@ function renderMatchCard(match, options = {}) {
   const isAdmin = App.user && App.user.is_admin;
 
   let betSelectorHTML = '';
-  if (showBets && !isCompleted && !isAdmin) {
-    const disabled = isClosed && !match.betting_open ? 'disabled' : '';
+  if (showBets && !isCompleted && !isClosed && !isAdmin) {
     betSelectorHTML = `
       <div class="bet-selector">
-        <button class="bet-btn ${match.my_bet === 'team_a' ? 'selected' : ''}" ${disabled}
+        <button class="bet-btn ${match.my_bet === 'team_a' ? 'selected' : ''}"
           onclick="event.stopPropagation(); Dashboard.placeBet(${match.id}, 'team_a', this)">${match.team_a}</button>
-        <button class="bet-btn ${match.my_bet === 'tie' ? 'selected' : ''}" ${disabled}
+        <button class="bet-btn ${match.my_bet === 'tie' ? 'selected' : ''}"
           onclick="event.stopPropagation(); Dashboard.placeBet(${match.id}, 'tie', this)">Tie</button>
-        <button class="bet-btn ${match.my_bet === 'team_b' ? 'selected' : ''}" ${disabled}
+        <button class="bet-btn ${match.my_bet === 'team_b' ? 'selected' : ''}"
           onclick="event.stopPropagation(); Dashboard.placeBet(${match.id}, 'team_b', this)">${match.team_b}</button>
       </div>
     `;

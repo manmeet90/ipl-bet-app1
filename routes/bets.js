@@ -24,10 +24,6 @@ router.post('/', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Match is already completed' });
   }
 
-  if (match.betting_open === 0) {
-    return res.status(400).json({ error: 'Betting is closed for this match' });
-  }
-
   const now = new Date();
   const cutoff = new Date(match.bet_cutoff);
   if (now >= cutoff) {

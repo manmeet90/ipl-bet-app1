@@ -143,13 +143,10 @@ router.put('/matches/:id', (req, res) => {
   const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(req.params.id);
   if (!match) return res.status(404).json({ error: 'Match not found' });
 
-  const { bet_points, betting_open, bet_cutoff, team_a, team_b, match_date, match_time, venue } = req.body;
+  const { bet_points, bet_cutoff, team_a, team_b, match_date, match_time, venue } = req.body;
 
   if (bet_points !== undefined) {
     db.prepare('UPDATE matches SET bet_points = ? WHERE id = ?').run(bet_points, match.id);
-  }
-  if (betting_open !== undefined) {
-    db.prepare('UPDATE matches SET betting_open = ? WHERE id = ?').run(betting_open ? 1 : 0, match.id);
   }
   if (bet_cutoff !== undefined) {
     db.prepare('UPDATE matches SET bet_cutoff = ? WHERE id = ?').run(bet_cutoff, match.id);

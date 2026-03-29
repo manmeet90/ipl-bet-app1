@@ -121,6 +121,7 @@ const AdminPage = {
     try { this.matches = await API.getMatches(); } catch (e) { return `<p>${e.message}</p>`; }
 
     const rows = this.matches.map(m => {
+      const cutoffLabel = m.bet_cutoff ? new Date(m.bet_cutoff).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) : '—';
       const isClosed = m.betting_closed;
       return `
         <tr>
@@ -128,12 +129,7 @@ const AdminPage = {
           <td><strong>${m.team_a}</strong> vs <strong>${m.team_b}</strong></td>
           <td>${m.match_date}</td>
           <td>${m.bet_points}</td>
-          <td>
-            <label class="toggle">
-              <input type="checkbox" ${m.betting_open ? 'checked' : ''} onchange="AdminPage.toggleBetting(${m.id}, this.checked, this)">
-              <span class="toggle-slider"></span>
-            </label>
-          </td>
+          <td style="font-size:12px;color:${isClosed ? 'var(--accent-red)' : 'var(--accent-green)'};">${cutoffLabel}<br><small>${isClosed ? 'Closed' : 'Open'}</small></td>
           <td>${m.is_completed ? '✅ ' + (m.result === 'team_a' ? m.team_a : m.result === 'team_b' ? m.team_b : m.result === 'abandoned' ? 'Abandoned' : 'Tie') : '—'}</td>
           <td>
             <button class="btn btn-ghost btn-sm" onclick="AdminPage.editMatch(${m.id})">Edit</button>
@@ -145,24 +141,11 @@ const AdminPage = {
     return `
       <div style="overflow-x:auto;">
         <table class="admin-table">
-          <thead><tr><th>#</th><th>Match</th><th>Date</th><th>Pts</th><th>Betting</th><th>Result</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>Match</th><th>Date</th><th>Pts</th><th>Cutoff</th><th>Result</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
     `;
-  },
-
-  async toggleBetting(id, open, el) {
-    if (el) el.disabled = true;
-    try {
-      await API.updateMatch(id, { betting_open: open });
-      Toast.success(`Betting ${open ? 'opened' : 'closed'}`);
-    } catch (e) {
-      Toast.error(e.message);
-      if (el) el.checked = !open;
-    } finally {
-      if (el) el.disabled = false;
-    }
   },
 
   editMatch(id) {
@@ -197,8 +180,8 @@ const AdminPage = {
           <input class="form-input" type="number" id="em-pts" value="${m.bet_points}">
         </div>
         <div class="form-group">
-          <label>Bet Cutoff</label>
-          <input class="form-input" type="datetime-local" id="em-cutoff" value="${m.bet_cutoff ? m.bet_cutoff.replace(' ', 'T').slice(0, 16) : ''}">
+          <label>Bet Cutoff (IST)</label>
+          <input class="form-input" type="datetime-local" id="em-cutoff" value="${m.bet_cutoff ? m.bet_cutoff.replace(' ', 'T').replace(/[+Z].*$/, '').slice(0, 16) : ''}">
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-primary" onclick="AdminPage.saveMatch(${m.id}, this)">Save</button>
@@ -209,6 +192,10 @@ const AdminPage = {
   },
 
   async saveMatch(id, btnEl) {
+    let cutoff = document.getElementById('em-cutoff').value;
+    if (cutoff && !cutoff.includes('+') && !cutoff.includes('Z')) {
+      cutoff += ':00+05:30';
+    }
     const data = {
       team_a: document.getElementById('em-ta').value.trim(),
       team_b: document.getElementById('em-tb').value.trim(),
@@ -216,7 +203,7 @@ const AdminPage = {
       match_time: document.getElementById('em-time').value.trim(),
       venue: document.getElementById('em-venue').value.trim(),
       bet_points: parseInt(document.getElementById('em-pts').value),
-      bet_cutoff: document.getElementById('em-cutoff').value
+      bet_cutoff: cutoff
     };
     await Loader.btn(btnEl, async () => {
       try {
