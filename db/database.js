@@ -8,7 +8,21 @@ const tursoUrl = process.env.TURSO_DATABASE_URL;
 const tursoToken = process.env.TURSO_AUTH_TOKEN;
 
 if (tursoUrl) {
-  db = new Database(tursoUrl, { authToken: tursoToken });
+  const replicaPath = path.join(__dirname, '..', 'data', 'local-replica.db');
+  const dataDir = path.dirname(replicaPath);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  db = new Database(replicaPath, {
+    syncUrl: tursoUrl,
+    authToken: tursoToken,
+  });
+  db.sync();
+  console.log('Turso embedded replica synced on startup');
+
+  setInterval(() => {
+    try { db.sync(); } catch (e) { console.error('Turso sync error:', e.message); }
+  }, 60_000);
 } else {
   const DB_PATH = path.join(__dirname, '..', 'data', 'ipl_bet.db');
   const dataDir = path.dirname(DB_PATH);
