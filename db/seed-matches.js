@@ -139,4 +139,8 @@ function seed() {
 }
 
 seed();
+if (process.env.TURSO_DATABASE_URL) {
+  db.sync();
+  console.log('Synced to Turso.');
+}
 console.log('Seed complete.');

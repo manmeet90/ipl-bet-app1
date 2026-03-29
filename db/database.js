@@ -19,10 +19,6 @@ if (tursoUrl) {
   });
   db.sync();
   console.log('Turso embedded replica synced on startup');
-
-  setInterval(() => {
-    try { db.sync(); } catch (e) { console.error('Turso sync error:', e.message); }
-  }, 60_000);
 } else {
   const DB_PATH = path.join(__dirname, '..', 'data', 'ipl_bet.db');
   const dataDir = path.dirname(DB_PATH);

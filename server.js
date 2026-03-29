@@ -4,7 +4,13 @@ const session = require('express-session');
 const cors = require('cors');
 const path = require('path');
 
-require('./db/database');
+const db = require('./db/database');
+
+if (process.env.TURSO_DATABASE_URL) {
+  setInterval(() => {
+    try { db.sync(); } catch (e) { console.error('Turso sync error:', e.message); }
+  }, 60_000);
+}
 
 const authRoutes = require('./routes/auth');
 const matchRoutes = require('./routes/matches');
