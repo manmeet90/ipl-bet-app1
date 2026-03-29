@@ -39,23 +39,19 @@ function settleMatch(matchId, result) {
     'INSERT INTO points_ledger (user_id, match_id, points_delta, reason) VALUES (?, ?, ?, ?)'
   );
 
-  const settle = db.transaction(() => {
-    for (const l of losers) {
-      insertLedger.run(l.id, matchId, -betPoints, l.reason);
+  for (const l of losers) {
+    insertLedger.run(l.id, matchId, -betPoints, l.reason);
+  }
+
+  if (winners.length > 0) {
+    const pointsPerWinner = Math.round((totalPool / winners.length) * 100) / 100;
+    for (const w of winners) {
+      insertLedger.run(w.id, matchId, pointsPerWinner, 'win');
     }
+  }
 
-    if (winners.length > 0) {
-      const pointsPerWinner = Math.round((totalPool / winners.length) * 100) / 100;
-      for (const w of winners) {
-        insertLedger.run(w.id, matchId, pointsPerWinner, 'win');
-      }
-    }
-
-    db.prepare('UPDATE matches SET result = ?, is_completed = 1 WHERE id = ?')
-      .run(result, matchId);
-  });
-
-  settle();
+  db.prepare('UPDATE matches SET result = ?, is_completed = 1 WHERE id = ?')
+    .run(result, matchId);
 
   return {
     winners: winners.length,

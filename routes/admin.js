@@ -209,12 +209,9 @@ router.post('/matches/:id/undo-result', (req, res) => {
 
 // Reset all bets, results, and points
 router.post('/reset-all', (req, res) => {
-  const resetTx = db.transaction(() => {
-    db.prepare('DELETE FROM points_ledger').run();
-    db.prepare('DELETE FROM bets').run();
-    db.prepare('UPDATE matches SET result = NULL, is_completed = 0').run();
-  });
-  resetTx();
+  db.prepare('DELETE FROM points_ledger').run();
+  db.prepare('DELETE FROM bets').run();
+  db.prepare('UPDATE matches SET result = NULL, is_completed = 0').run();
   res.json({ ok: true });
 });
 

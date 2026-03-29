@@ -17,11 +17,13 @@ if (tursoUrl) {
   }
   db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
 }
 
-db.pragma('foreign_keys = ON');
-
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
-db.exec(schema);
+const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
+for (const stmt of statements) {
+  db.exec(stmt);
+}
 
 module.exports = db;

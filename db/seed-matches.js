@@ -116,18 +116,14 @@ function seed() {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    const insertMany = db.transaction((matches) => {
-      for (const m of matches) {
-        const matchType = m.type || 'league';
-        let betPoints = 50;
-        if (matchType === 'qualifier' || matchType === 'eliminator') betPoints = 100;
-        if (matchType === 'final') betPoints = 250;
-        const cutoff = `${m.date}T13:00:00+05:30`;
-        insert.run(m.n, m.a, m.b, m.date, m.time, m.venue, matchType, betPoints, cutoff);
-      }
-    });
-
-    insertMany(matches);
+    for (const m of matches) {
+      const matchType = m.type || 'league';
+      let betPoints = 50;
+      if (matchType === 'qualifier' || matchType === 'eliminator') betPoints = 100;
+      if (matchType === 'final') betPoints = 250;
+      const cutoff = `${m.date}T13:00:00+05:30`;
+      insert.run(m.n, m.a, m.b, m.date, m.time, m.venue, matchType, betPoints, cutoff);
+    }
     console.log(`Seeded ${matches.length} matches.`);
   }
 
