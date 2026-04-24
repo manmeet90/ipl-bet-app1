@@ -2,6 +2,53 @@ const AdminPage = {
   tab: 'users',
   users: [],
   matches: [],
+  
+  // Sorting state
+  matchesSort: { field: 'match_number', direction: 'asc' },
+  declareSort: { field: 'match_number', direction: 'asc' },
+  settledSort: { field: 'match_number', direction: 'asc' },
+
+  // Sorting functions
+  sortMatches(matches, sortConfig) {
+    return matches.slice().sort((a, b) => {
+      let aVal, bVal;
+      
+      if (sortConfig.field === 'match_number') {
+        aVal = parseInt(a.match_number) || 0;
+        bVal = parseInt(b.match_number) || 0;
+      } else if (sortConfig.field === 'match_date') {
+        aVal = new Date(a.match_date || '1900-01-01');
+        bVal = new Date(b.match_date || '1900-01-01');
+      } else {
+        return 0;
+      }
+      
+      const result = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      return sortConfig.direction === 'desc' ? -result : result;
+    });
+  },
+
+  toggleSort(table, field) {
+    const sortConfig = this[`${table}Sort`];
+    
+    if (sortConfig.field === field) {
+      // Same field - toggle direction
+      sortConfig.direction = sortConfig.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+      // New field - default to ascending
+      sortConfig.field = field;
+      sortConfig.direction = 'asc';
+    }
+    
+    // Re-render the current tab
+    this.switchTab(this.tab);
+  },
+
+  getSortIcon(table, field) {
+    const sortConfig = this[`${table}Sort`];
+    if (sortConfig.field !== field) return '↕️';
+    return sortConfig.direction === 'asc' ? '⬆️' : '⬇️';
+  },
 
   async render() {
     return `
@@ -51,8 +98,8 @@ const AdminPage = {
         <td>${u.email || '—'}</td>
         <td>
           <div class="inline-actions">
-            <button class="btn btn-ghost btn-sm" onclick="AdminPage.promptResetPw(${u.id}, '${u.name}', this)">Reset PW</button>
-            <button class="btn btn-danger btn-sm" onclick="AdminPage.deleteUser(${u.id}, '${u.name}', this)">Delete</button>
+            <button class="btn btn-ghost btn-sm" onclick="AdminPage.promptResetPw('${u.id}', '${u.name.replace(/'/g, "\\'")}', this)">Reset PW</button>
+            <button class="btn btn-danger btn-sm" onclick="AdminPage.deleteUser('${u.id}', '${u.name.replace(/'/g, "\\'")}', this)">Delete</button>
           </div>
         </td>
       </tr>
@@ -120,7 +167,10 @@ const AdminPage = {
   async renderMatches() {
     try { this.matches = await API.getMatches(); } catch (e) { return `<p>${e.message}</p>`; }
 
-    const rows = this.matches.map(m => {
+    // Apply sorting
+    const sortedMatches = this.sortMatches(this.matches, this.matchesSort);
+
+    const rows = sortedMatches.map(m => {
       const cutoffLabel = m.bet_cutoff ? new Date(m.bet_cutoff).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) : '—';
       const isClosed = m.betting_closed;
       return `
@@ -132,7 +182,7 @@ const AdminPage = {
           <td style="font-size:12px;color:${isClosed ? 'var(--accent-red)' : 'var(--accent-green)'};">${cutoffLabel}<br><small>${isClosed ? 'Closed' : 'Open'}</small></td>
           <td>${m.is_completed ? '✅ ' + (m.result === 'team_a' ? m.team_a : m.result === 'team_b' ? m.team_b : m.result === 'abandoned' ? 'Abandoned' : 'Tie') : '—'}</td>
           <td>
-            <button class="btn btn-ghost btn-sm" onclick="AdminPage.editMatch(${m.id})">Edit</button>
+            <button class="btn btn-ghost btn-sm" onclick="AdminPage.editMatch('${m.id}')">Edit</button>
           </td>
         </tr>
       `;
@@ -141,7 +191,21 @@ const AdminPage = {
     return `
       <div style="overflow-x:auto;">
         <table class="admin-table">
-          <thead><tr><th>#</th><th>Match</th><th>Date</th><th>Pts</th><th>Cutoff</th><th>Result</th><th></th></tr></thead>
+          <thead>
+            <tr>
+              <th style="cursor: pointer; user-select: none;" onclick="AdminPage.toggleSort('matches', 'match_number')">
+                # ${this.getSortIcon('matches', 'match_number')}
+              </th>
+              <th>Match</th>
+              <th style="cursor: pointer; user-select: none;" onclick="AdminPage.toggleSort('matches', 'match_date')">
+                Date ${this.getSortIcon('matches', 'match_date')}
+              </th>
+              <th>Pts</th>
+              <th>Cutoff</th>
+              <th>Result</th>
+              <th></th>
+            </tr>
+          </thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -184,7 +248,7 @@ const AdminPage = {
           <input class="form-input" type="datetime-local" id="em-cutoff" value="${m.bet_cutoff ? m.bet_cutoff.replace(' ', 'T').replace(/[+Z].*$/, '').slice(0, 16) : ''}">
         </div>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-primary" onclick="AdminPage.saveMatch(${m.id}, this)">Save</button>
+          <button class="btn btn-primary" onclick="AdminPage.saveMatch('${m.id}', this)">Save</button>
           <button class="btn btn-ghost" onclick="AdminPage.switchTab('matches')">Cancel</button>
         </div>
       </div>
@@ -236,7 +300,7 @@ const AdminPage = {
       <h3 style="margin-bottom:12px;">Place Bets on Behalf of Users</h3>
       <div class="form-group" style="max-width:500px;">
         <label>Select Match</label>
-        <select class="form-input" onchange="AdminPage.selectBetMatch(parseInt(this.value))">
+        <select class="form-input" onchange="AdminPage.selectBetMatch(this.value)">
           <option value="">— Choose a match —</option>
           ${matchOptions}
         </select>
@@ -261,7 +325,7 @@ const AdminPage = {
     try { data = await API.getMatchBets(matchId); } catch (e) { return `<p>${e.message}</p>`; }
 
     const m = data.match;
-    const isSettled = m.is_completed === 1;
+    const isSettled = m.is_completed === true || m.status === 'completed';
     const note = isSettled
       ? `<p style="color:var(--accent-gold);font-size:13px;margin-bottom:12px;">⚠ This match is already settled. Changing a bet will automatically re-calculate points for everyone.</p>`
       : '';
@@ -273,10 +337,10 @@ const AdminPage = {
           <td style="font-weight:600;">${b.name}</td>
           <td>
             <div class="inline-actions">
-              <button class="bet-btn btn-sm ${sel('team_a')}" onclick="AdminPage.adminBet(${b.user_id}, ${matchId}, 'team_a', this)">${m.team_a}</button>
-              <button class="bet-btn btn-sm ${sel('tie')}" onclick="AdminPage.adminBet(${b.user_id}, ${matchId}, 'tie', this)">Tie</button>
-              <button class="bet-btn btn-sm ${sel('team_b')}" onclick="AdminPage.adminBet(${b.user_id}, ${matchId}, 'team_b', this)">${m.team_b}</button>
-              <button class="bet-btn btn-sm ${!b.prediction ? 'selected' : ''}" style="opacity:${!b.prediction ? 1 : 0.5}" onclick="AdminPage.adminBet(${b.user_id}, ${matchId}, null, this)">No Bet</button>
+              <button class="bet-btn btn-sm ${sel('team_a')}" onclick="AdminPage.adminBet('${b.user_id}', '${matchId}', 'team_a', this)">${m.team_a}</button>
+              <button class="bet-btn btn-sm ${sel('tie')}" onclick="AdminPage.adminBet('${b.user_id}', '${matchId}', 'tie', this)">Tie</button>
+              <button class="bet-btn btn-sm ${sel('team_b')}" onclick="AdminPage.adminBet('${b.user_id}', '${matchId}', 'team_b', this)">${m.team_b}</button>
+              <button class="bet-btn btn-sm ${!b.prediction ? 'selected' : ''}" style="opacity:${!b.prediction ? 1 : 0.5}" onclick="AdminPage.adminBet('${b.user_id}', '${matchId}', null, this)">No Bet</button>
             </div>
           </td>
           <td style="color:var(--text-muted);font-size:12px;">${b.prediction ? (b.prediction === 'team_a' ? m.team_a : b.prediction === 'team_b' ? m.team_b : 'Tie') : '—'}</td>
@@ -322,7 +386,7 @@ const AdminPage = {
     try { this.matches = await API.getMatches(); } catch (e) { return `<p>${e.message}</p>`; }
 
     const pending = this.matches.filter(m => !m.is_completed);
-    const completed = this.matches.filter(m => m.is_completed).reverse();
+    const completed = this.matches.filter(m => m.is_completed);
 
     const declareHTML = this.renderDeclareSection(pending);
     const settledHTML = this.renderSettledSection(completed);
@@ -351,17 +415,21 @@ const AdminPage = {
     if (pending.length === 0) {
       return '<div class="empty-state"><div class="icon">✅</div><p>All matches have been settled!</p></div>';
     }
-    const rows = pending.map(m => `
+
+    // Apply sorting to pending matches
+    const sortedPending = this.sortMatches(pending, this.declareSort);
+
+    const rows = sortedPending.map(m => `
       <tr>
         <td>${m.match_number}</td>
         <td><strong>${m.team_a}</strong> vs <strong>${m.team_b}</strong></td>
         <td>${m.match_date}</td>
         <td>
           <div class="inline-actions">
-            <button class="btn btn-sm" style="background:var(--accent-blue);color:#fff;" onclick="AdminPage.declareResult(${m.id}, 'team_a', '${m.team_a}', this)">${m.team_a} Won</button>
-            <button class="btn btn-sm" style="background:var(--accent-orange);color:#fff;" onclick="AdminPage.declareResult(${m.id}, 'team_b', '${m.team_b}', this)">${m.team_b} Won</button>
-            <button class="btn btn-sm" style="background:var(--accent-teal);color:#fff;" onclick="AdminPage.declareResult(${m.id}, 'tie', 'Tie', this)">Tie</button>
-            <button class="btn btn-sm" style="background:var(--text-muted);color:#fff;" onclick="AdminPage.declareResult(${m.id}, 'abandoned', 'Abandoned', this)">Abandoned</button>
+            <button class="btn btn-sm" style="background:var(--accent-blue);color:#fff;" onclick="AdminPage.declareResult('${m.id}', 'team_a', '${m.team_a}', this)">${m.team_a} Won</button>
+            <button class="btn btn-sm" style="background:var(--accent-orange);color:#fff;" onclick="AdminPage.declareResult('${m.id}', 'team_b', '${m.team_b}', this)">${m.team_b} Won</button>
+            <button class="btn btn-sm" style="background:var(--accent-teal);color:#fff;" onclick="AdminPage.declareResult('${m.id}', 'tie', 'Tie', this)">Tie</button>
+            <button class="btn btn-sm" style="background:var(--text-muted);color:#fff;" onclick="AdminPage.declareResult('${m.id}', 'abandoned', 'Abandoned', this)">Abandoned</button>
           </div>
         </td>
       </tr>
@@ -370,7 +438,18 @@ const AdminPage = {
     return `
       <div style="overflow-x:auto;">
         <table class="admin-table">
-          <thead><tr><th>#</th><th>Match</th><th>Date</th><th>Declare Winner</th></tr></thead>
+          <thead>
+            <tr>
+              <th style="cursor: pointer; user-select: none;" onclick="AdminPage.toggleSort('declare', 'match_number')">
+                # ${this.getSortIcon('declare', 'match_number')}
+              </th>
+              <th>Match</th>
+              <th style="cursor: pointer; user-select: none;" onclick="AdminPage.toggleSort('declare', 'match_date')">
+                Date ${this.getSortIcon('declare', 'match_date')}
+              </th>
+              <th>Declare Winner</th>
+            </tr>
+          </thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -381,15 +460,20 @@ const AdminPage = {
     if (completed.length === 0) {
       return '<div class="empty-state"><div class="icon">📊</div><p>No matches settled yet</p></div>';
     }
-    const rows = completed.map(m => {
+
+    // Apply sorting to completed matches
+    const sortedCompleted = this.sortMatches(completed, this.settledSort);
+
+    const rows = sortedCompleted.map(m => {
       const winner = m.result === 'abandoned' ? 'Abandoned' : m.result === 'team_a' ? m.team_a : m.result === 'team_b' ? m.team_b : 'Tie';
       return `
         <tr>
           <td>${m.match_number}</td>
           <td>${m.team_a} vs ${m.team_b}</td>
+          <td>${m.match_date}</td>
           <td>${winner}</td>
           <td>
-            <button class="btn btn-ghost btn-sm" onclick="AdminPage.undoResult(${m.id}, this)">Undo</button>
+            <button class="btn btn-ghost btn-sm" onclick="AdminPage.undoResult('${m.id}', this)">Undo</button>
           </td>
         </tr>
       `;
@@ -398,7 +482,19 @@ const AdminPage = {
     return `
       <div style="overflow-x:auto;">
         <table class="admin-table">
-          <thead><tr><th>#</th><th>Match</th><th>Result</th><th></th></tr></thead>
+          <thead>
+            <tr>
+              <th style="cursor: pointer; user-select: none;" onclick="AdminPage.toggleSort('settled', 'match_number')">
+                # ${this.getSortIcon('settled', 'match_number')}
+              </th>
+              <th>Match</th>
+              <th style="cursor: pointer; user-select: none;" onclick="AdminPage.toggleSort('settled', 'match_date')">
+                Date ${this.getSortIcon('settled', 'match_date')}
+              </th>
+              <th>Result</th>
+              <th></th>
+            </tr>
+          </thead>
           <tbody>${rows}</tbody>
         </table>
       </div>

@@ -18,7 +18,7 @@ const LeaderboardPage = {
       const ptsClass = r.total_points > 0 ? 'points-positive' : r.total_points < 0 ? 'points-negative' : 'points-zero';
 
       return `
-        <tr class="${isMe ? 'me' : ''} lb-row-clickable" onclick="LeaderboardPage.showUserDetail(${r.id}, '${r.name.replace(/'/g, "\\'")}')">
+        <tr class="${isMe ? 'me' : ''} lb-row-clickable" onclick="LeaderboardPage.showUserDetail('${r.id}', '${r.name.replace(/'/g, "\\'").replace(/"/g, '\\"')}')">
           <td><span class="rank-badge ${rankClass}">${medalEmoji || r.rank}</span></td>
           <td style="font-weight:${isMe ? 800 : 600}">${r.name} ${isMe ? '(You)' : ''}</td>
           <td class="points-value ${ptsClass}">${r.total_points > 0 ? '+' : ''}${r.total_points}</td>

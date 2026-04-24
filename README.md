@@ -2,13 +2,33 @@
 
 A fun betting web app for your team to bet on IPL 2026 matches. Built with vanilla JS frontend and Node.js/Express backend.
 
-## Quick Start (Local Development)
+> **🔥 Now supports Firebase Realtime Database!** Migrated from SQLite to Firebase for better scalability and real-time features.
+
+## Quick Start
+
+### Option 1: Firebase (Recommended - Cloud Database)
 
 ```bash
 # Install dependencies
 npm install
 
-# Seed the database (creates matches + admin user)
+# Set up Firebase (see FIREBASE_SETUP.md for detailed instructions)
+# Add your Firebase credentials to .env file
+
+# Seed the Firebase database
+npm run seed-firebase
+
+# Start the server
+npm start
+```
+
+### Option 2: SQLite (Local Development Only)
+
+```bash
+# Install dependencies
+npm install
+
+# Seed the local database
 npm run seed
 
 # Start the server
@@ -16,8 +36,6 @@ npm start
 ```
 
 Then open **http://localhost:3000** in your browser.
-
-Locally, the app uses a SQLite file (`data/ipl_bet.db`). No extra setup needed.
 
 ## Default Admin Login
 
@@ -85,9 +103,27 @@ The seed script is safe to re-run — it skips if matches/admin already exist.
 - **Admin controls** — Manage users, edit matches/cutoffs, declare results, place bets on behalf of users
 - **Match abandoned** — Supports abandoned matches with no point impact
 
+## Migration from Turso/SQLite
+
+If you have an existing app with data in Turso or SQLite:
+
+1. **Export your data** to JSON files (users.json, matches.json, bets.json, points_ledger.json)
+2. **Set up Firebase** following `FIREBASE_SETUP.md`
+3. **Run the migration**: `npm run migrate-from-turso`
+4. **Verify the migration** worked correctly
+
+See `MIGRATION_FROM_TURSO_GUIDE.md` for detailed instructions.
+
+## Documentation
+
+- 📖 **[Firebase Setup Guide](FIREBASE_SETUP.md)** - Set up Firebase Realtime Database
+- 🔄 **[Migration Guide](MIGRATION_FROM_TURSO_GUIDE.md)** - Migrate from Turso/SQLite to Firebase  
+- 📋 **[Migration Summary](MIGRATION_SUMMARY.md)** - Technical details of the Firebase migration
+- 🗂️ **[Database Structure](firebase-database-structure.md)** - Firebase schema documentation
+
 ## Tech Stack
 
 - **Frontend:** Vanilla HTML, CSS, JavaScript (zero frameworks)
-- **Backend:** Node.js + Express
-- **Database:** SQLite via libsql (local dev) / Turso (production)
+- **Backend:** Node.js + Express  
+- **Database:** Firebase Realtime Database (primary) / SQLite (fallback)
 - **Auth:** Session-based (express-session)

@@ -1,80 +1,107 @@
 const express = require('express');
-const db = require('../db/database');
+const firebaseDB = require('../db/firebase-web-db');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.post('/', requireAuth, (req, res) => {
-  const { match_id, prediction } = req.body;
-  if (!match_id || !prediction) {
-    return res.status(400).json({ error: 'match_id and prediction required' });
+router.post('/', requireAuth, async (req, res) => {
+  try {
+    const { match_id, prediction } = req.body;
+    if (!match_id || !prediction) {
+      return res.status(400).json({ error: 'match_id and prediction required' });
+    }
+    if (!['team_a', 'team_b', 'tie'].includes(prediction)) {
+      return res.status(400).json({ error: 'prediction must be team_a, team_b, or tie' });
+    }
+
+    if (req.session.isAdmin) {
+      return res.status(403).json({ error: 'Admin account cannot place bets' });
+    }
+
+    const match = await firebaseDB.getMatchById(match_id);
+    if (!match) return res.status(404).json({ error: 'Match not found' });
+
+    if (match.is_completed) {
+      return res.status(400).json({ error: 'Match is already completed' });
+    }
+
+    const now = new Date();
+    const cutoff = new Date(match.bet_cutoff);
+    if (now >= cutoff) {
+      return res.status(400).json({ error: 'Betting cutoff has passed for this match' });
+    }
+
+    await firebaseDB.createOrUpdateBet(req.session.userId, match_id, { predicted_team: prediction });
+
+    res.json({ ok: true, prediction });
+  } catch (error) {
+    console.error('Place bet error:', error);
+    res.status(500).json({ error: 'Failed to place bet' });
   }
-  if (!['team_a', 'team_b', 'tie'].includes(prediction)) {
-    return res.status(400).json({ error: 'prediction must be team_a, team_b, or tie' });
-  }
-
-  if (req.session.isAdmin) {
-    return res.status(403).json({ error: 'Admin account cannot place bets' });
-  }
-
-  const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(match_id);
-  if (!match) return res.status(404).json({ error: 'Match not found' });
-
-  if (match.is_completed) {
-    return res.status(400).json({ error: 'Match is already completed' });
-  }
-
-  const now = new Date();
-  const cutoff = new Date(match.bet_cutoff);
-  if (now >= cutoff) {
-    return res.status(400).json({ error: 'Betting cutoff has passed for this match' });
-  }
-
-  db.prepare(`
-    INSERT INTO bets (user_id, match_id, prediction, placed_at)
-    VALUES (?, ?, ?, datetime('now'))
-    ON CONFLICT(user_id, match_id)
-    DO UPDATE SET prediction = excluded.prediction, placed_at = datetime('now')
-  `).run(req.session.userId, match_id, prediction);
-
-  res.json({ ok: true, prediction });
 });
 
-router.get('/my', requireAuth, (req, res) => {
-  const userId = req.session.userId;
+router.get('/my', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
 
-  const bets = db.prepare(`
-    SELECT b.*, m.team_a, m.team_b, m.match_date, m.match_time, m.match_number, m.result, m.is_completed, m.bet_points
-    FROM bets b
-    JOIN matches m ON b.match_id = m.id
-    WHERE b.user_id = ?
-  `).all(userId);
+    // Get user's bets with match details
+    const userBetsWithMatches = await firebaseDB.getUserBetsWithMatches(userId);
+    
+    // Get all points entries for this user to find missed matches
+    const pointsEntries = await firebaseDB.getPointsEntriesByUser(userId);
+    const missedMatchIds = pointsEntries
+      .filter(entry => entry.reason === 'no_bet')
+      .map(entry => entry.match_id);
 
-  const missedMatches = db.prepare(`
-    SELECT NULL as id, NULL as user_id, NULL as prediction, NULL as placed_at,
-           m.id as match_id, m.team_a, m.team_b, m.match_date, m.match_time,
-           m.match_number, m.result, m.is_completed, m.bet_points
-    FROM points_ledger pl
-    JOIN matches m ON pl.match_id = m.id
-    WHERE pl.user_id = ? AND pl.reason = 'no_bet'
-      AND m.id NOT IN (SELECT match_id FROM bets WHERE user_id = ?)
-  `).all(userId, userId);
-
-  const all = [...bets, ...missedMatches];
-  all.sort((a, b) => (b.match_date || '').localeCompare(a.match_date || ''));
-
-  const result = all.map(b => {
-    let points_earned = null;
-    if (b.is_completed) {
-      const ledger = db.prepare(
-        'SELECT points_delta FROM points_ledger WHERE user_id = ? AND match_id = ?'
-      ).get(userId, b.match_id);
-      points_earned = ledger ? ledger.points_delta : 0;
+    // Get missed match details
+    const missedMatches = [];
+    for (const matchId of missedMatchIds) {
+      const match = await firebaseDB.getMatchById(matchId);
+      if (match && !userBetsWithMatches.find(bet => bet.match_id === matchId)) {
+        missedMatches.push({
+          id: null,
+          user_id: null,
+          match_id: matchId,
+          prediction: null,
+          placed_at: null,
+          match: match
+        });
+      }
     }
-    return { ...b, is_completed: b.is_completed === 1, points_earned };
-  });
 
-  res.json(result);
+    const all = [...userBetsWithMatches, ...missedMatches];
+    all.sort((a, b) => (b.match?.match_date || '').localeCompare(a.match?.match_date || ''));
+
+    const result = await Promise.all(all.map(async (b) => {
+      let points_earned = null;
+      const isCompleted = b.match?.is_completed === true || b.match?.status === 'completed';
+      if (isCompleted) {
+        const ledger = await firebaseDB.getPointsEntryByUserAndMatch(userId, b.match_id);
+        points_earned = ledger ? ledger.points_delta : 0;
+      }
+      return {
+        id: b.id,
+        user_id: b.user_id,
+        match_id: b.match_id,
+        prediction: b.prediction,
+        placed_at: b.placed_at,
+        team_a: b.match?.team1, // Map team1 to team_a
+        team_b: b.match?.team2, // Map team2 to team_b
+        match_date: b.match?.match_date,
+        match_time: b.match?.match_time,
+        match_number: b.match?.match_number,
+        result: b.match?.result,
+        is_completed: isCompleted,
+        bet_points: b.match?.bet_points,
+        points_earned
+      };
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('Get my bets error:', error);
+    res.status(500).json({ error: 'Failed to get bets' });
+  }
 });
 
 module.exports = router;

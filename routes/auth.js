@@ -1,31 +1,37 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const db = require('../db/database');
+const firebaseDB = require('../db/firebase-web-db');
 const { sendOTPEmail } = require('../services/email');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.post('/login', (req, res) => {
-  const { phone, password } = req.body;
-  if (!phone || !password) return res.status(400).json({ error: 'Phone and password required' });
+router.post('/login', async (req, res) => {
+  try {
+    const { phone, password } = req.body;
+    if (!phone || !password) return res.status(400).json({ error: 'Phone and password required' });
 
-  const user = db.prepare('SELECT * FROM users WHERE phone = ?').get(phone);
-  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    const user = await firebaseDB.getUserByPhone(phone);
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
-  if (!bcrypt.compareSync(password, user.password_hash)) {
-    return res.status(401).json({ error: 'Invalid credentials' });
+    const storedPassword = user.password || user.password_hash;
+    if (!storedPassword || !bcrypt.compareSync(password, storedPassword)) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    req.session.userId = user.id;
+    req.session.isAdmin = user.is_admin === true;
+
+    res.json({
+      id: user.id,
+      name: user.name,
+      phone: user.phone,
+      is_admin: user.is_admin === true
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
   }
-
-  req.session.userId = user.id;
-  req.session.isAdmin = user.is_admin === 1;
-
-  res.json({
-    id: user.id,
-    name: user.name,
-    phone: user.phone,
-    is_admin: user.is_admin === 1
-  });
 });
 
 router.post('/logout', (req, res) => {
@@ -34,32 +40,48 @@ router.post('/logout', (req, res) => {
   });
 });
 
-router.get('/me', (req, res) => {
-  if (!req.session || !req.session.userId) {
-    return res.status(401).json({ error: 'Not authenticated' });
+router.get('/me', async (req, res) => {
+  try {
+    if (!req.session || !req.session.userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    const user = await firebaseDB.getUserById(req.session.userId);
+    if (!user) return res.status(401).json({ error: 'User not found' });
+    res.json({ 
+      id: user.id,
+      name: user.name,
+      phone: user.phone,
+      email: user.email,
+      is_admin: user.is_admin === true 
+    });
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({ error: 'Failed to get user' });
   }
-  const user = db.prepare('SELECT id, name, phone, email, is_admin FROM users WHERE id = ?').get(req.session.userId);
-  if (!user) return res.status(401).json({ error: 'User not found' });
-  res.json({ ...user, is_admin: user.is_admin === 1 });
 });
 
-router.put('/change-password', requireAuth, (req, res) => {
-  const { current_password, new_password } = req.body;
-  if (!current_password || !new_password) {
-    return res.status(400).json({ error: 'Current and new password required' });
-  }
-  if (new_password.length < 6) {
-    return res.status(400).json({ error: 'New password must be at least 6 characters' });
-  }
+router.put('/change-password', requireAuth, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) {
+      return res.status(400).json({ error: 'Current and new password required' });
+    }
+    if (new_password.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
-  if (!bcrypt.compareSync(current_password, user.password_hash)) {
-    return res.status(400).json({ error: 'Current password is incorrect' });
-  }
+    const user = await firebaseDB.getUserById(req.session.userId);
+    if (!user || !bcrypt.compareSync(current_password, user.password_hash)) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
 
-  const hash = bcrypt.hashSync(new_password, 10);
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, user.id);
-  res.json({ ok: true, message: 'Password changed successfully' });
+    const hash = bcrypt.hashSync(new_password, 10);
+    await firebaseDB.updateUser(user.id, { password_hash: hash });
+    res.json({ ok: true, message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
 });
 
 router.post('/forgot-password', async (req, res) => {
@@ -67,26 +89,28 @@ router.post('/forgot-password', async (req, res) => {
     const { phone, email } = req.body;
     if (!phone || !email) return res.status(400).json({ error: 'Phone and email required' });
 
-    const user = db.prepare('SELECT * FROM users WHERE phone = ?').get(phone);
+    const user = await firebaseDB.getUserByPhone(phone);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
-    const recentCount = db.prepare(
-      "SELECT COUNT(*) as count FROM password_resets WHERE user_id = ? AND created_at > ?"
-    ).get(user.id, oneHourAgo);
+    const recentResets = await firebaseDB.getPasswordResetsByUser(user.id, oneHourAgo);
 
-    if (recentCount.count >= 3) {
+    if (recentResets.length >= 3) {
       return res.status(429).json({ error: 'Too many OTP requests. Try again later.' });
     }
 
-    db.prepare("UPDATE password_resets SET is_used = 1 WHERE user_id = ? AND is_used = 0").run(user.id);
+    await firebaseDB.markPasswordResetsAsUsed(user.id);
 
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
-    db.prepare(
-      'INSERT INTO password_resets (user_id, email, otp_code, otp_expires_at) VALUES (?, ?, ?, ?)'
-    ).run(user.id, email, otp, expiresAt);
+    await firebaseDB.createPasswordReset({
+      user_id: user.id,
+      email,
+      otp_code: otp,
+      otp_expires_at: expiresAt,
+      is_used: false
+    });
 
     await sendOTPEmail(email, otp);
 
@@ -97,29 +121,31 @@ router.post('/forgot-password', async (req, res) => {
   }
 });
 
-router.post('/reset-password', (req, res) => {
-  const { phone, otp, new_password } = req.body;
-  if (!phone || !otp || !new_password) {
-    return res.status(400).json({ error: 'Phone, OTP and new password required' });
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { phone, otp, new_password } = req.body;
+    if (!phone || !otp || !new_password) {
+      return res.status(400).json({ error: 'Phone, OTP and new password required' });
+    }
+    if (new_password.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    const user = await firebaseDB.getUserByPhone(phone);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const reset = await firebaseDB.getValidPasswordReset(user.id, otp);
+    if (!reset) return res.status(400).json({ error: 'Invalid or expired OTP' });
+
+    const hash = bcrypt.hashSync(new_password, 10);
+    await firebaseDB.updateUser(user.id, { password_hash: hash });
+    await firebaseDB.updatePasswordReset(reset.id, { is_used: true });
+
+    res.json({ ok: true, message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
   }
-  if (new_password.length < 6) {
-    return res.status(400).json({ error: 'New password must be at least 6 characters' });
-  }
-
-  const user = db.prepare('SELECT * FROM users WHERE phone = ?').get(phone);
-  if (!user) return res.status(404).json({ error: 'User not found' });
-
-  const reset = db.prepare(
-    "SELECT * FROM password_resets WHERE user_id = ? AND otp_code = ? AND is_used = 0 AND otp_expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1"
-  ).get(user.id, otp);
-
-  if (!reset) return res.status(400).json({ error: 'Invalid or expired OTP' });
-
-  const hash = bcrypt.hashSync(new_password, 10);
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, user.id);
-  db.prepare('UPDATE password_resets SET is_used = 1 WHERE id = ?').run(reset.id);
-
-  res.json({ ok: true, message: 'Password reset successfully' });
 });
 
 module.exports = router;

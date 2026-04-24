@@ -51,11 +51,11 @@ function renderMatchCard(match, options = {}) {
     betSelectorHTML = `
       <div class="bet-selector">
         <button class="bet-btn ${match.my_bet === 'team_a' ? 'selected' : ''}"
-          onclick="event.stopPropagation(); Dashboard.placeBet(${match.id}, 'team_a', this)">${match.team_a}</button>
+          onclick="event.stopPropagation(); Dashboard.placeBet('${match.id}', 'team_a', this)">${match.team_a}</button>
         <button class="bet-btn ${match.my_bet === 'tie' ? 'selected' : ''}"
-          onclick="event.stopPropagation(); Dashboard.placeBet(${match.id}, 'tie', this)">Tie</button>
+          onclick="event.stopPropagation(); Dashboard.placeBet('${match.id}', 'tie', this)">Tie</button>
         <button class="bet-btn ${match.my_bet === 'team_b' ? 'selected' : ''}"
-          onclick="event.stopPropagation(); Dashboard.placeBet(${match.id}, 'team_b', this)">${match.team_b}</button>
+          onclick="event.stopPropagation(); Dashboard.placeBet('${match.id}', 'team_b', this)">${match.team_b}</button>
       </div>
     `;
   }

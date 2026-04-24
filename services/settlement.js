@@ -1,20 +1,21 @@
-const db = require('../db/database');
+const firebaseDB = require('../db/firebase-web-db');
 
-function settleMatch(matchId, result) {
-  const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(matchId);
+async function settleMatch(matchId, result) {
+  const match = await firebaseDB.getMatchById(matchId);
   if (!match) throw new Error('Match not found');
-  if (match.is_completed) throw new Error('Match already settled');
+  const isCompleted = match.is_completed === true || match.status === 'completed';
+  if (isCompleted) throw new Error('Match already settled');
 
   if (result === 'abandoned') {
-    db.prepare('UPDATE matches SET result = ?, is_completed = 1 WHERE id = ?')
-      .run('abandoned', matchId);
+    await firebaseDB.updateMatch(matchId, { result: 'abandoned', status: 'completed' });
     return { winners: 0, losers: 0, totalPool: 0, pointsPerWinner: 0, abandoned: true };
   }
 
-  const allUsers = db.prepare('SELECT * FROM users WHERE is_admin = 0').all();
-  if (allUsers.length === 0) throw new Error('No users to settle');
+  const allUsers = await firebaseDB.getAllUsers();
+  const nonAdminUsers = allUsers.filter(user => !user.is_admin);
+  if (nonAdminUsers.length === 0) throw new Error('No users to settle');
 
-  const bets = db.prepare('SELECT * FROM bets WHERE match_id = ?').all(matchId);
+  const bets = await firebaseDB.getBetsByMatch(matchId);
   const betMap = {};
   for (const b of bets) {
     betMap[b.user_id] = b.prediction;
@@ -24,7 +25,7 @@ function settleMatch(matchId, result) {
   const winners = [];
   const losers = [];
 
-  for (const user of allUsers) {
+  for (const user of nonAdminUsers) {
     const pick = betMap[user.id];
     if (!pick || pick !== result) {
       losers.push({ ...user, reason: pick ? 'loss' : 'no_bet' });
@@ -35,23 +36,32 @@ function settleMatch(matchId, result) {
 
   const totalPool = losers.length * betPoints;
 
-  const insertLedger = db.prepare(
-    'INSERT INTO points_ledger (user_id, match_id, points_delta, reason) VALUES (?, ?, ?, ?)'
-  );
+  // Prepare all settlement entries
+  const settlements = [];
 
+  // Add losers
   for (const l of losers) {
-    insertLedger.run(l.id, matchId, -betPoints, l.reason);
+    settlements.push({
+      user_id: l.id,
+      points_delta: -betPoints,
+      reason: l.reason
+    });
   }
 
+  // Add winners
   if (winners.length > 0) {
     const pointsPerWinner = Math.round((totalPool / winners.length) * 100) / 100;
     for (const w of winners) {
-      insertLedger.run(w.id, matchId, pointsPerWinner, 'win');
+      settlements.push({
+        user_id: w.id,
+        points_delta: pointsPerWinner,
+        reason: 'win'
+      });
     }
   }
 
-  db.prepare('UPDATE matches SET result = ?, is_completed = 1 WHERE id = ?')
-    .run(result, matchId);
+  // Use atomic settlement operation
+  await firebaseDB.settleMatch(matchId, result, settlements);
 
   return {
     winners: winners.length,
@@ -61,16 +71,20 @@ function settleMatch(matchId, result) {
   };
 }
 
-function resettleMatch(matchId) {
-  const match = db.prepare('SELECT * FROM matches WHERE id = ?').get(matchId);
+async function resettleMatch(matchId) {
+  const match = await firebaseDB.getMatchById(matchId);
   if (!match) throw new Error('Match not found');
-  if (!match.is_completed) return null;
+  const isCompleted = match.is_completed === true || match.status === 'completed';
+  if (!isCompleted) return null;
   if (match.result === 'abandoned') return null;
 
-  db.prepare('DELETE FROM points_ledger WHERE match_id = ?').run(matchId);
-  db.prepare('UPDATE matches SET is_completed = 0, result = NULL WHERE id = ?').run(matchId);
+  // Clear existing points for this match
+  await firebaseDB.clearMatchPointsEntries(matchId);
 
-  return settleMatch(matchId, match.result);
+  // Reset match status
+  await firebaseDB.updateMatch(matchId, { status: null, result: null });
+
+  return await settleMatch(matchId, match.result);
 }
 
 module.exports = { settleMatch, resettleMatch };

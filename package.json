@@ -5,15 +5,18 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "seed": "node db/seed-matches.js"
+    "seed": "node db/seed-matches.js",
+    "seed-firebase": "node db/firebase-seed.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
-    "libsql": "^0.5.29",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
+    "firebase": "^12.12.1",
+    "google-auth-library": "^10.6.2",
+    "libsql": "^0.5.29",
     "nodemailer": "^6.9.16"
   }
 }

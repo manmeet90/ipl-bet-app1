@@ -4,3 +4,6 @@ data/
 *.db
 *.db-shm
 *.db-wal
+
+# Firebase credentials (not used with Web SDK)
+# firebase-service-account-key.json
